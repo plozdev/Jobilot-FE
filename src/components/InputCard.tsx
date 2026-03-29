@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Upload, FileText, Terminal, Sparkles, X, AlertCircle, Link as LinkIcon, AlignLeft } from 'lucide-react';
 
 interface InputCardProps {
-  onAnalyze: (jobDesc: string, cvFile: File | null) => void;
+  onAnalyze: (jdText: string, cvFile: File | null, targetLevel: 'intern' | 'fresher' | 'junior') => void;
   isLoading: boolean;
 }
 
@@ -11,6 +11,7 @@ export function InputCard({ onAnalyze, isLoading }: InputCardProps) {
   const [jobDescError, setJobDescError] = useState<string | null>(null);
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [targetLevel, setTargetLevel] = useState<'intern' | 'fresher' | 'junior'>('junior');
 
   // Cleanup object URL to avoid memory leaks
   useEffect(() => {
@@ -74,7 +75,7 @@ export function InputCard({ onAnalyze, isLoading }: InputCardProps) {
 
   const handleAnalyze = () => {
     if (!jobDesc.trim() || jobDescError) return;
-    onAnalyze(jobDesc, cvFile);
+    onAnalyze(jobDesc, cvFile, targetLevel);
   };
 
   const isUrl = jobDesc.trim().startsWith('http') || jobDesc.trim().startsWith('www.');
@@ -91,6 +92,25 @@ export function InputCard({ onAnalyze, isLoading }: InputCardProps) {
       </div>
 
       <div className="space-y-6">
+        <div>
+          <label className="block text-xs font-mono text-gray-500 mb-3 uppercase tracking-widest">Target Career Level</label>
+          <div className="grid grid-cols-3 gap-3">
+            {(['intern', 'fresher', 'junior'] as const).map((level) => (
+              <button
+                key={level}
+                onClick={() => setTargetLevel(level)}
+                className={`py-2.5 px-4 rounded-lg font-mono text-sm transition-all duration-200 uppercase tracking-widest border ${
+                  targetLevel === level
+                    ? 'bg-[#00ff9d] text-black border-[#00ff9d] shadow-[0_0_15px_rgba(0,255,157,0.3)]'
+                    : 'bg-black/40 text-gray-400 border-white/[0.1] hover:border-white/[0.2] hover:text-gray-300'
+                }`}
+              >
+                {level}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div>
           <label className="block text-xs font-mono text-gray-500 mb-3 uppercase tracking-widest">Job Description or URL</label>
           <textarea
