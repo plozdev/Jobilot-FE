@@ -2,22 +2,26 @@ import React, { useState, useCallback } from 'react';
 import { InputCard } from './components/InputCard';
 import { DecisionCard } from './components/DecisionCard';
 import { MatchBreakdown } from './components/MatchBreakdown';
-import { CVImprovements } from './components/CVImprovements';
-import { InterviewQuestions } from './components/InterviewQuestions';
-import { MatchedTech } from './components/MatchedTech';
+import { MarketCard } from './components/MarketCard';
+import { CompanyInfo } from './components/CompanyInfo';
 import { Terminal, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { analyzeJobMatch, AnalyzeResponse } from './services/api';
+import { analyzeJobMatch, analyzeCompany, AnalyzeResponse, AnalyzeRequest, CompanyInfo as CompanyInfoType } from './services/api';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(false);
+  const [companyLoading, setCompanyLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
+  const [companyInfo, setCompanyInfo] = useState<CompanyInfoType | null>(null);
+  const [jdText, setJdText] = useState<string>("");
 
-  const handleAnalyze = useCallback(async (jobDesc: string, cvFile: File | null) => {
+  const handleAnalyze = useCallback(async (jdTextInput: string, cvFile: File | null, targetLevel: 'intern' | 'fresher' | 'junior') => {
     setIsLoading(true);
     setResult(null);
+    setCompanyInfo(null);
     setError(null);
+    setJdText(jdTextInput); // Save for later company fetch
     
     try {
       // 1. File Processing (Text Extraction)
@@ -26,18 +30,26 @@ export default function App() {
         if (cvFile.type === 'text/plain') {
           cvText = await cvFile.text();
         } else {
-          // In production: use pdf.js for PDFs or mammoth for DOCX
           cvText = `[Simulated text extraction from ${cvFile.name}]`;
         }
       }
 
-      // 2. API Integration
-      const response = await analyzeJobMatch({
-        jobDescription: jobDesc,
-        cvText: cvText
-      });
+      if (!cvText.trim()) {
+        setError("Please provide CV text or upload a file");
+        setIsLoading(false);
+        return;
+      }
 
+      // 2. API Integration - Analyze Job Match ONLY
+      const payload: AnalyzeRequest = {
+        jdText: jdTextInput,
+        cvText,
+        targetLevel
+      };
+
+      const response = await analyzeJobMatch(payload);
       setResult(response);
+
     } catch (err) {
       console.error("Analysis failed:", err);
       setError(err instanceof Error ? err.message : "An unexpected error occurred during analysis.");
@@ -45,6 +57,22 @@ export default function App() {
       setIsLoading(false);
     }
   }, []);
+
+  // Separate handler for company info
+  const handleFetchCompanyInfo = useCallback(async () => {
+    if (!jdText.trim()) return;
+    
+    setCompanyLoading(true);
+    try {
+      const info = await analyzeCompany({ jobDescription: jdText });
+      setCompanyInfo(info);
+    } catch (err) {
+      console.error("Failed to fetch company info:", err);
+      // Don't show error in main error state, just fail silently or toast
+    } finally {
+      setCompanyLoading(false);
+    }
+  }, [jdText]);
 
   return (
     <div className="min-h-screen bg-[#050505] text-gray-200 font-sans selection:bg-[#00ff9d]/30 selection:text-[#00ff9d] pb-24">
@@ -60,7 +88,7 @@ export default function App() {
             </span>
           </div>
           <div className="text-[10px] font-mono text-gray-500 uppercase tracking-widest border border-white/[0.05] px-2.5 py-1 rounded-full bg-white/[0.02]">
-            Beta
+            v2
           </div>
         </div>
       </header>
@@ -69,10 +97,10 @@ export default function App() {
         {/* Hero Section */}
         <div className="text-center space-y-6 mb-12">
           <h1 className="text-5xl md:text-6xl font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-white/60 pb-2">
-            Decode the Job Description
+            Should You Apply?
           </h1>
           <p className="text-gray-400 text-lg md:text-xl font-light max-w-2xl mx-auto leading-relaxed">
-            AI-powered analysis to determine if you should apply, what you're missing, and how to tailor your CV.
+            AI-powered analysis for Vietnam backend roles. Get keyword matching, HR insights, and market fit assessment.
           </p>
         </div>
 
@@ -123,31 +151,51 @@ export default function App() {
               transition={{ duration: 0.5, staggerChildren: 0.15 }}
               className="space-y-8"
             >
+              {/* Company Info - Shows if available */}
+              {companyInfo && (
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                  <CompanyInfo company={companyInfo} />
+                </motion.div>
+              )}
+
+              {/* Fetch Company Info Button - Show if not loaded yet */}
+              {!companyInfo && (
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                  <button
+                    onClick={handleFetchCompanyInfo}
+                    disabled={companyLoading}
+                    className="w-full py-3 px-6 bg-white/[0.05] hover:bg-white/[0.1] disabled:bg-white/[0.03] text-[#00ff9d] border border-white/[0.1] hover:border-[#00ff9d]/50 disabled:border-white/[0.05] rounded-xl transition-all duration-200 flex items-center justify-center gap-2 font-mono text-sm uppercase tracking-widest"
+                  >
+                    {companyLoading ? (
+                      <>
+                        <div className="w-3 h-3 border-2 border-[#00ff9d]/50 border-t-[#00ff9d] rounded-full animate-spin"></div>
+                        <span>Loading Company Info...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>📊 Fetch Company Information</span>
+                      </>
+                    )}
+                  </button>
+                </motion.div>
+              )}
+
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-                <DecisionCard decision={result.decision} score={result.score} />
+                <DecisionCard decision={result.decision} score={result.match.score} />
               </motion.div>
               
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-                <MatchedTech tech={result.matchedTech} />
+                <MatchBreakdown 
+                  matchedKeywords={result.match.matchedKeywords} 
+                  missingKeywords={result.match.missingKeywords}
+                  strengthsHR={result.strengthsHR}
+                  gaps={result.gaps}
+                />
               </motion.div>
 
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-                <MatchBreakdown 
-                  strengths={result.match.strengths} 
-                  missing={result.match.missing} 
-                  learnable={result.match.learnable} 
-                />
+                <MarketCard market={result.market} />
               </motion.div>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="h-full">
-                  <CVImprovements improvements={result.cvFix} />
-                </motion.div>
-                
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="h-full">
-                  <InterviewQuestions questions={result.questions} />
-                </motion.div>
-              </div>
             </motion.div>
           )}
         </AnimatePresence>
